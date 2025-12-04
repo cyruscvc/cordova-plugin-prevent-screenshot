@@ -1,54 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
-        xmlns:android="http://schemas.android.com/apk/res/android"
         id="cordova-plugin-prevent-screenshot-coffice"
         version="1.0.1">
-
-    <name>cordova-plugin-prevent-screenshot-coffice</name>
-    <description>Cordova plugin for prevent screenCapture</description>
+    <name>Screenshot Blocker</name>
+    <description>Prevents and detects screenshots on mobile apps</description>
     <license>MIT</license>
-    <keywords>cordova</keywords>
-    <repo>https://github.com/flotrugliocoffice/cordova-plugin-prevent-screenshot-coffice</repo>
-    <issue>https://github.com/flotrugliocoffice/cordova-plugin-prevent-screenshot-coffice/issues</issue>
+    <keywords>cordova,screenshot,prevent,detect</keywords>
+    <author>Raphael CR93</author>
 
-    <js-module src="www/screenshot.js" name="screenshot">
-        <clobbers target="window.plugins.preventscreenshot"/>
+    <!-- JS Interface -->
+    <js-module src="www/screenshot.js" name="Screenshot">
+        <clobbers target="plugins.screenshot" />
     </js-module>
 
-    <engines>
-        <engine name="cordova" version=">=7.1.0"/>
-        <engine name="cordova-android" version=">=7.0.0"/>
-        <engine name="cordova-ios" version=">=4.3.0"/>
-    </engines>
-
+    <!-- Android (keep existing) -->
     <platform name="android">
         <config-file target="res/xml/config.xml" parent="/*">
-            <feature name="screenshotName">
-                <param name="android-package" value="com.coffice.ScreenshotBlocker"/>
-                <param name="onload" value="true"/>
+            <feature name="Screenshot">
+                <param name="android-package" value="com.coffice.ScreenshotBlocker" />
             </feature>
         </config-file>
-
-	<config-file target="AndroidManifest.xml" parent="/*">
-            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-        </config-file>
-            
-        <source-file src="src/android/com/coffice/ScreenshotBlocker.java" target-dir="src/com/coffice"/>
-        <source-file src="src/android/com/coffice/ScreenShotContentObserver.java" target-dir="src/com/coffice"/>
-	    <source-file src="src/android/com/coffice/PermissionHelper.java" target-dir="src/com/coffice"/>
+        <source-file src="src/android/com/coffice/PermissionHelper.java" target-dir="src/com/coffice" />
+        <source-file src="src/android/com/coffice/ScreenshotContentObserver.java" target-dir="src/com/coffice" />
+        <source-file src="src/android/com/coffice/ScreenshotBlocker.java" target-dir="src/com/coffice" />
     </platform>
 
+    <!-- iOS (extend with hooks) -->
     <platform name="ios">
         <config-file target="config.xml" parent="/*">
-            <feature name="screenshotName">
-                <param name="ios-package" value="ScreenshotBlocker"/>
-                <param name="onload" value="true"/>
+            <feature name="Screenshot">
+                <param name="ios-package" value="ScreenshotBlocker" />
             </feature>
         </config-file>
+        <header-file src="src/ios/ScreenshotBlocker.h" />
+        <source-file src="src/ios/ScreenshotBlocker.m" />
+        <source-file src="src/ios/ScreenRecordingDetector.h" />
+        <source-file src="src/ios/ScreenRecordingDetector.m" />
 
-        <header-file src="src/ios/ScreenshotBlocker.h"/>
-        <source-file src="src/ios/ScreenshotBlocker.m"/>
-        <header-file src="src/ios/ScreenRecordingDetector.h"/>
-        <source-file src="src/ios/ScreenRecordingDetector.m"/>
+        <!-- Hook to inject into AppDelegate.m -->
+        <hook type="after_prepare" src="hooks/after_prepare.js" />
     </platform>
-
 </plugin>
