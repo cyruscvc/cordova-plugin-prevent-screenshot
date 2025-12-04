@@ -1,119 +1,110 @@
 #import "ScreenshotBlocker.h"
-@interface ScreenshotBlocker() {
-    CDVInvokedUrlCommand * _eventCommand;
-}
-@end
+
+static BOOL preventionEnabled = NO;
+static UITextField *secureField = nil;
+static UIWindow *protectedWindow = nil;
 
 @implementation ScreenshotBlocker
-UIImageView* cover;
-- (void)pluginInitialize {
-    NSLog(@"Starting ScreenshotBlocker plugin");
 
-    [[NSNotificationCenter defaultCenter]addObserver:self
-                                            selector:@selector(appDidBecomeActive)
-                                                name:UIApplicationDidBecomeActiveNotification
-                                              object:nil];
-    [[NSNotificationCenter defaultCenter]addObserver:self
-                                            selector:@selector(applicationWillResignActive)
-                                                name:UIApplicationWillResignActiveNotification
-                                              object:nil];
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(tookScreeshot)
-                                                 name:UIApplicationUserDidTakeScreenshotNotification
-                                               object:nil];
-
-    [[NSNotificationCenter defaultCenter]addObserver:self
-                                            selector:@selector(goingBackground)
-                                                name:UIApplicationWillResignActiveNotification
-                                              object:nil];
-
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(screenCaptureStatusChanged)
-                                                 name:kScreenRecordingDetectorRecordingStatusChangedNotification
-                                               object:nil];
-
-    /*
-     userDidTakeScreenshotNotification
-     */
-
-}
-
-- (void)enable:(CDVInvokedUrlCommand *)command
-{
-    CDVPluginResult* pluginResult = nil;
-    NSLog(@"Abilita observers");
-    /*
-     [[NSNotificationCenter defaultCenter]addObserver:self
-     selector:@selector(appDidBecomeActive)
-     name:UIApplicationDidBecomeActiveNotification
-     object:nil];
-     [[NSNotificationCenter defaultCenter]addObserver:self
-     selector:@selector(applicationWillResignActive)
-     name:UIApplicationWillResignActiveNotification
-     object:nil];
-     [[NSNotificationCenter defaultCenter] addObserver:self
-     selector:@selector(screenCaptureStatusChanged)
-     name:kScreenRecordingDetectorRecordingStatusChangedNotification
-     object:nil];
-     pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-     */
-}
--(void)listen:(CDVInvokedUrlCommand*)command {
-    _eventCommand = command;
-}
-
-
--(void) goingBackground {
-    NSLog(@"Me la scattion in bck");
-    if(_eventCommand!=nil) {
-        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"background"];
-        [pluginResult setKeepCallbackAsBool:YES];
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:_eventCommand.callbackId];
-    }
-}
--(void)tookScreeshot {
-    NSLog(@"fatta la foto?");
-    if(_eventCommand!=nil) {
-        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"tookScreenshot"];
-        [pluginResult setKeepCallbackAsBool:YES];
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:_eventCommand.callbackId];
+- (void)enable:(CDVInvokedUrlCommand*)command {
+    // Your existing Android-forwarding logic? (e.g., if not iOS, no-op)
+    
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults boolForKey:@"screenshotPreventionEnabled"]) {
+        CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:YES];
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+        return;
     }
 
+    protectedWindow = self.viewController.view.window;
+    if (!protectedWindow) {
+        // Retry post-deviceready
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self enable:command];
+        });
+        return;
+    }
+
+    // Create hidden secure UITextField
+    secureField = [[UITextField alloc] initWithFrame:protectedWindow.bounds];
+    secureField.secureTextEntry = YES;
+    secureField.hidden = YES;
+    secureField.backgroundColor = [UIColor clearColor];
+    [protectedWindow insertSubview:secureField atIndex:0];
+
+    // Reparent for protection (screenshots go black)
+    [protectedWindow.layer removeFromSuperlayer];
+    [secureField.layer addSublayer:protectedWindow.layer];
+
+    preventionEnabled = YES;
+    [defaults setBool:YES forKey:@"screenshotPreventionEnabled"];
+    [defaults synchronize];
+
+    CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:YES];
+    [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
 }
 
--(void)setupView {
-    BOOL isCaptured = [[UIScreen mainScreen] isCaptured];
-    NSLog(@"Is screen captured? %@", (isCaptured?@"SI":@"NO"));
+- (void)disable:(CDVInvokedUrlCommand*)command {
+    if (!preventionEnabled) {
+        CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:NO];
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+        return;
+    }
 
-    if ([[ScreenRecordingDetector sharedInstance] isRecording]) {
-        [self webView].alpha = 0.f;
-        NSLog(@"Registro o prendo screenshots");
-    } else {
-        [self webView].alpha = 1.f;
-        NSLog(@"Non registro");
+    // Reverse: Restore layer hierarchy
+    if (secureField && protectedWindow) {
+        [protectedWindow.layer removeFromSuperlayer];
+        // Re-add to original superlayer (window's root view or superview.layer)
+        UIView *rootView = protectedWindow.rootViewController.view;
+        [rootView.layer addSublayer:protectedWindow.layer];
+        [secureField removeFromSuperview];
+        secureField = nil;
+        protectedWindow = nil;
+    }
 
+    preventionEnabled = NO;
+    [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"screenshotPreventionEnabled"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+
+    CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:NO];
+    [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+}
+
+// Detection (your existing, enhanced with overlay)
+- (void)userDidTakeScreenshot:(NSNotification *)notification {
+    // Fire JS event (adapt to your callback ID or global event)
+    NSString *jsStatement = @"setTimeout(function() { cordova.fireDocumentEvent('onTookScreenshot'); }, 0);";
+    [self.commandDelegate evalJs:jsStatement];
+
+    if (preventionEnabled) {
+        [self showDetectionOverlay];
     }
 }
 
--(void)appDidBecomeActive {
-    [ScreenRecordingDetector triggerDetectorTimer];
-    if(cover!=nil) {
-        [cover removeFromSuperview];
-        cover = nil;
-    }
-}
--(void)applicationWillResignActive {
-    [ScreenRecordingDetector stopDetectorTimer];
-    if(cover == nil) {
-        cover = [[UIImageView alloc] initWithFrame:[self.webView frame]];
-        cover.backgroundColor = [UIColor blackColor];
-        [self.webView addSubview:cover];
-    }
-}
--(void)screenCaptureStatusChanged {
-    [self setupView];
-}
+- (void)showDetectionOverlay {
+    if (!protectedWindow) return;
 
+    UIView *overlay = [[UIView alloc] initWithFrame:protectedWindow.bounds];
+    overlay.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.7];
+    overlay.alpha = 0.0;
+    [protectedWindow addSubview:overlay];
+
+    UILabel *label = [[UILabel alloc] initWithFrame:overlay.bounds];
+    label.text = @"Screenshots are prohibited";
+    label.textColor = [UIColor whiteColor];
+    label.textAlignment = NSTextAlignmentCenter;
+    label.font = [UIFont boldSystemFontOfSize:16];
+    [overlay addSubview:label];
+
+    [UIView animateWithDuration:0.3 animations:^{
+        overlay.alpha = 1.0;
+    } completion:^(BOOL finished) {
+        [UIView animateWithDuration:1.5 animations:^{
+            overlay.alpha = 0.0;
+        } completion:^(BOOL finished) {
+            [overlay removeFromSuperview];
+        }];
+    }];
+}
 
 @end
