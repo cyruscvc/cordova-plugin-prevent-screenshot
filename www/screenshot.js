@@ -1,10 +1,10 @@
 var screenshot = {
-  enable: function (successCallback, errorCallback) {
-    cordova.exec(successCallback, errorCallback, 'screenshotName', 'enable', []);
-  },
-  disable: function (successCallback, errorCallback) {
-    cordova.exec(successCallback, errorCallback, 'screenshotName', 'disable', []);
-  },
+    enable: function(success, error) {
+        exec(success || function() {}, error || function() {}, 'ScreenshotBlocker', 'enable', []);
+    },
+    disable: function(success, error) {
+        exec(success || function() {}, error || function() {}, 'ScreenshotBlocker', 'disable', []);
+    },
   registerListener : function(callback) {
     cordova.exec(callback, callback, 'screenshotName', 'listen', []);
   },
